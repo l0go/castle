@@ -181,6 +181,24 @@ class Sheet {
 		return o;
 	}
 
+	public function copyLine( ?index : Int, toCopy: Dynamic ) {
+		var o = {
+		};
+		for( c in sheet.columns ) {
+			Reflect.setField(o, c.name, Reflect.field(toCopy, c.name));
+		}
+		if( index == null )
+			sheet.lines.push(o);
+		else {
+			for( s in sheet.separators ) {
+				if( s.index > index ) s.index++;
+			}
+			sheet.lines.insert(index + 1, o);
+			changeLineOrder([for( i in 0...sheet.lines.length ) i <= index ? i : i + 1]);
+		}
+		return o;
+	}
+
 	public function getPath() {
 		return path == null ? sheet.name : path;
 	}

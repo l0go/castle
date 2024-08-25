@@ -97,14 +97,16 @@ class Level {
 
 	public function getName() {
 		var name = "#"+index;
-		for( c in sheet.columns ) {
-			var v : Dynamic = Reflect.field(obj, c.name);
-			switch( c.type ) {
-			case TString | TRef(_) if( c.name == sheet.props.displayColumn && v != null && v != "" ):
-				return v+"#"+index;
-			case TId:
-				name = v;
-			default:
+		@:privateAccess if(sheet.sheet != null){
+			for( c in sheet.columns ) {
+				var v : Dynamic = Reflect.field(obj, c.name);
+				switch( c.type ) {
+				case TString | TRef(_) if( c.name == sheet.props.displayColumn && v != null && v != "" ):
+					return v+"#"+index;
+				case TId:
+					name = v;
+				default:
+				}
 			}
 		}
 		return name;
