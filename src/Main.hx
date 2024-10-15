@@ -715,7 +715,8 @@ class Main extends Model {
 		var ndel = new MenuItem( { label : "Delete" } );
 		var nsep = new MenuItem( { label : "Separator", type : MenuItemType.checkbox } );
 		var nref = new MenuItem( { label : "Show References" } );
-		for( m in [nup, ndown, nins, ndel, nsep, nref] )
+		var ndup = new MenuItem( { label : "Duplicate" } );
+		for( m in [nup, ndown, nins, ndel, nsep, nref, ndup] )
 			n.append(m);
 
 		var sepIndex = -1;
@@ -751,6 +752,12 @@ class Main extends Model {
 		};
 		nref.click = function() {
 			showReferences(sheet, index);
+		};
+		ndup.click = function() {
+			sheet.copyLine(index, sheet.lines[index]);
+			refresh();
+			save();
+
 		};
 		if( sheet.props.hide )
 			nsep.enabled = false;
