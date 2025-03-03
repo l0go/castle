@@ -14,6 +14,9 @@
  * IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 import js.jquery.Helper.*;
+import electron.main.Menu;
+import electron.main.MenuItem;
+
 
 extern class DockNode {
 	var elementPanel : js.html.HtmlElement;
@@ -194,13 +197,13 @@ class JqPage extends vdom.Server {
 		case "popupMenu":
 
 			var args : Array<String> = cast args;
-			var n = new js.node.webkit.Menu();
+			var n = new Menu();
 			for( i in 0...args.length ) {
-				var mit = new js.node.webkit.MenuItem( { label : args[i] } );
+				var mit = new MenuItem( { label : args[i] } );
 				n.append(mit);
 				mit.click = function() result(i);
 			}
-			@:privateAccess n.popup(Main.inst.mousePos.x, Main.inst.mousePos.y);
+			@:privateAccess n.popup({x : Main.inst.mousePos.x, y : Main.inst.mousePos.y});
 
 		case "startDrag":
 

@@ -20,9 +20,9 @@ import js.jquery.JQuery;
 import Main.K;
 import lvl.LayerData;
 
-import js.node.webkit.Menu;
-import js.node.webkit.MenuItem;
-import js.node.webkit.MenuItemType;
+import electron.renderer.IpcRenderer;
+import electron.main.Menu;
+import electron.main.MenuItem;
 
 typedef LevelState = {
 	var curLayer : String;
@@ -322,7 +322,7 @@ class Level {
 			var f = getFileTime(w.path);
 			if( f != w.time && f != 0. ) {
 				w.time = f;
-				js.node.webkit.App.clearCache();
+				IpcRenderer.invoke("clearCache");
 				for( c in w.callb )
 					c();
 			}
@@ -650,13 +650,12 @@ class Level {
 			}).keypress(function(e) if( e.keyCode == 13 ) JTHIS.blur()));
 		};
 		nrename.enabled = ndel.enabled;
-		n.popup(mouseX, mouseY);
+		IpcRenderer.invoke("popupMenu", n, {x : mouseX, y: mouseY});
 	}
 
 
 	public function onResize() {
-		var win = js.node.webkit.Window.get();
-		content.find(".scroll").css("height", (win.height - 240) + "px");
+		content.find(".scroll").css("height", ((electron.main.BrowserWindow.getFocusedWindow() : electron.main.BrowserWindow).getBounds().height - 240) + "px");
 	}
 
 	function setSort( j : JQuery, callb : { ref : Dynamic -> Void } ) {

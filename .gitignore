@@ -1,3 +1,4 @@
+.haxelib/
 /*.cdb
 /new.img
 /src/test/test.js
@@ -8,6 +9,7 @@
 /bin/style.min.css
 /www/sample
 /bin/castle.js
+/bin/index.js
 /bin/nwjs
 /bin/*.lnk
 /dist

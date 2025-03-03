@@ -207,10 +207,10 @@ class Model {
 
 	@:access(cdb.Sheet)
 	@:access(cdb.Database)
-	function importSheetJSON(_s:cdb.Sheet, _filePath:String) {
+	function importSheetJSON(_s:cdb.Sheet, _contents:String) {
 
 		// TODO: do import validation!!!
-		var shs:Array<Dynamic> = cast haxe.Json.parse(sys.io.File.getContent(_filePath));
+		var shs:Array<Dynamic> = cast haxe.Json.parse(_contents);
 		for (s in shs) {
 			// rename the imported sheet to match the current selected sheet.
 			s.name = s.name.replace(s.name.split('@')[0], _s.name);
@@ -263,8 +263,9 @@ class Model {
 	}
 
 	@:access(cdb.Sheet)
-	function importSheetCSV(_s:cdb.Sheet, _filePath:String) {
-		var d = Csv.decode(sys.io.File.getContent(_filePath));
+	function importSheetCSV(_s:cdb.Sheet, _contents:String) {
+		var d = Csv.decode(_contents);
+		trace(d);
 		var header = d.shift(); // get rid off first line
 
 		var colMapSheet = new Map<String, Column>();

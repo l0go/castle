@@ -1,6 +1,18 @@
--cp src
--js bin/castle.js
 -main Main
+-lib electron
+--debug
+-dce std
+-w -WDeprecated
+
+--each
+
+-js bin/index.js
+-cp src/runtime/
+
+--next
+
+-cp src/app/
+-js bin/castle.js
 -lib hxnodejs:git:https://github.com/HaxeFoundation/hxnodejs
 -lib hx3compat:git:https://github.com/HaxeFoundation/hx3compat
 -lib format:git:https://github.com/HaxeFoundation/format
@@ -8,5 +20,4 @@
 -lib thx.csv
 -D lz4js
 -D analyzer-optimize
--dce std
 -D js-es=6

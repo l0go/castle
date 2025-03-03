@@ -18,9 +18,9 @@ import cdb.Sheet;
 
 import js.jquery.Helper.*;
 import js.jquery.JQuery;
-import js.node.webkit.Menu;
-import js.node.webkit.MenuItem;
-import js.node.webkit.MenuItemType;
+
+//import electron.main.BrowserWindow;
+import electron.renderer.IpcRenderer;
 
 private typedef Cursor = {
 	s : Sheet,
@@ -53,7 +53,7 @@ class Main extends Model {
 
 	static var UID = 0;
 
-	var window : js.node.webkit.Window;
+	var window : js.html.Window;
 	var viewSheet : Sheet;
 	var mousePos : { x : Int, y : Int };
 	var typesStr : String;
@@ -69,26 +69,36 @@ class Main extends Model {
 	var colProps : { sheet : String, ref : Column, index : Null<Int> };
 	var levels : Array<Level>;
 	var level : Level;
-	var mcompress : MenuItem;
 	var pages : JqPages;
-
-	var macEditMenu : MenuItem;
 
 	function new() {
 		super();
-		window = js.node.webkit.Window.get();
-		window.on("resize", onResize);
-		window.on("focus", function(_) js.node.webkit.App.clearCache());
+
+		window = js.Browser.window;
+
+		/*
+		window = new BrowserWindow({
+			webPreferences: {
+				nodeIntegration: true,
+				contextIsolation: false
+			}
+		});
+		window.loadFile("index.html");
+		window.webContents.openDevTools({ mode: 'detach' });
+		**/
+
+		window.addEventListener("resize", onResize);
+		window.addEventListener("focus", function(_) IpcRenderer.invoke("clearCache"));
 		initMenu();
 		levels = [];
 		mousePos = { x : 0, y : 0 };
 		sheetCursors = new Map();
-		window.window.addEventListener("keydown", onKey);
-		window.window.addEventListener("keypress", onKeyPress);
-		window.window.addEventListener("keyup", onKeyUp);
-		window.window.addEventListener("mousemove", onMouseMove);
-		window.window.addEventListener("dragover", function(e : js.html.Event) { e.preventDefault(); return false; });
-		window.window.addEventListener("drop", onDragDrop);
+		window.addEventListener("keydown", onKey);
+		window.addEventListener("keypress", onKeyPress);
+		window.addEventListener("keyup", onKeyUp);
+		window.addEventListener("mousemove", onMouseMove);
+		window.addEventListener("dragover", function(e : js.html.Event) { e.preventDefault(); return false; });
+		window.addEventListener("drop", onDragDrop);
 		J(".modal").keypress(function(e) e.stopPropagation()).keydown(function(e) e.stopPropagation());
 		J("#search input").keydown(function(e) {
 			if( e.keyCode == 27 ) {
@@ -133,7 +143,7 @@ class Main extends Model {
 
 	function onResize(_) {
 		if( level != null ) level.onResize();
-		pages.onResize();
+		pages?.onResize();
 	}
 
 	function onMouseMove( e : js.html.MouseEvent ) {
@@ -158,7 +168,7 @@ class Main extends Model {
 			data : data,
 			schema : schema,
 		};
-		js.node.webkit.Clipboard.getInstance().set(clipboard.text, "text");
+		electron.Clipboard.writeText(clipboard.text);
 	}
 
 	function moveCursor( dx : Int, dy : Int, shift : Bool, ctrl : Bool ) {
@@ -311,7 +321,7 @@ class Main extends Model {
 					var out = {};
 					for( x in s.x1...s.x2+1 ) {
 						var c = cursor.s.columns[x];
-						var v = Reflect.field(obj, c.name);
+						var v = Reflect.field(obj, c?.name);
 						if( v != null )
 							Reflect.setField(out, c.name, v);
 					}
@@ -323,7 +333,7 @@ class Main extends Model {
 			onKey(cast { keyCode : 'C'.code, ctrlKey : true });
 			onKey(cast { keyCode : K.DELETE } );
 		case 'V'.code if( ctrlDown ):
-			if( cursor.s == null || clipboard == null || js.node.webkit.Clipboard.getInstance().get("text")  != clipboard.text )
+			if( cursor.s == null || clipboard == null || electron.Clipboard.readText() != clipboard.text )
 				return;
 			var sheet = cursor.s;
 			var posX = cursor.x < 0 ? 0 : cursor.x;
@@ -706,19 +716,8 @@ class Main extends Model {
 		J('.imagePreview').hide();
 		J('.previewContent > img').replaceWith('<img />');
 	}
-
-	function popupLine( sheet : Sheet, index : Int ) {
-		var n = new Menu();
-		var nup = new MenuItem( { label : "Move Up" } );
-		var ndown = new MenuItem( { label : "Move Down" } );
-		var nins = new MenuItem( { label : "Insert" } );
-		var ndel = new MenuItem( { label : "Delete" } );
-		var nsep = new MenuItem( { label : "Separator", type : MenuItemType.checkbox } );
-		var nref = new MenuItem( { label : "Show References" } );
-		var ndup = new MenuItem( { label : "Duplicate" } );
-		for( m in [nup, ndown, nins, ndel, nsep, nref, ndup] )
-			n.append(m);
-
+	
+	function getSepIndex(sheet: Sheet, index: Int) {
 		var sepIndex = -1;
 		for (i in 0...sheet.separators.length) {
 			var s = sheet.separators[i];
@@ -727,78 +726,79 @@ class Main extends Model {
 				break;
 			}
 		}
-		nsep.checked = sepIndex >= 0;
-		nins.click = function() {
-			newLine(sheet, index);
-		};
-		nup.click = function() {
+		return sepIndex;
+	}
+
+	function initializeLine( sheet : Sheet, index : Int ) {
+		IpcRenderer.removeAllListeners("line-move-up");
+		IpcRenderer.on("line-move-up", function() {
 			moveLine(sheet, index, -1);
-		};
-		ndown.click = function() {
+		});
+
+		IpcRenderer.removeAllListeners("line-move-down");
+		IpcRenderer.on("line-move-down", function() {
 			moveLine(sheet, index, 1);
-		};
-		ndel.click = function() {
+		});
+
+		IpcRenderer.removeAllListeners("line-insert");
+		IpcRenderer.on("line-insert", function() {
+			newLine(sheet, index);
+		});
+
+		IpcRenderer.removeAllListeners("line-delete");
+		IpcRenderer.on("line-delete", function() {
 			sheet.deleteLine(index);
 			refresh();
 			save();
-		};
-		nsep.click = function() {
+		});
+
+		final sepIndex = getSepIndex(sheet, index);
+		IpcRenderer.removeAllListeners("line-separator");
+		IpcRenderer.on("line-separator", function() {
 			if (sepIndex >= 0) { // remove
 				sheet.separators.splice(sepIndex, 1);
 			} else 
 				sheet.separators.push({index: index, id:Std.string(sepIndex), title:"unnamed separator"});
 			refresh();
 			save();
-		};
-		nref.click = function() {
+		});
+
+		IpcRenderer.removeAllListeners("line-references-show");
+		IpcRenderer.on("line-references-show", function() {
 			showReferences(sheet, index);
-		};
-		ndup.click = function() {
+		});
+
+		IpcRenderer.removeAllListeners("line-duplicate");
+		IpcRenderer.on("line-duplicate", function() {
 			sheet.copyLine(index, sheet.lines[index]);
 			refresh();
 			save();
+		});
 
-		};
-		if( sheet.props.hide )
-			nsep.enabled = false;
-		n.popup(mousePos.x, mousePos.y);
+		IpcRenderer.invoke("popupLine", !sheet.props.hide, sepIndex >= 0, {x : mousePos.x, y: mousePos.y});
 	}
 
 	function popupColumn( sheet : Sheet, c : Column, ?isProperties ) {
-		var n = new Menu();
-		var nedit = new MenuItem( { label : "Edit" } );
-		var nins = new MenuItem( { label : "Add Column" } );
-		var nleft = new MenuItem( { label : "Move Left" } );
-		var nright = new MenuItem( { label : "Move Right" } );
-		var ndel = new MenuItem( { label : "Delete" } );
-		var ndisp = new MenuItem( { label : "Display Column", type : MenuItemType.checkbox } );
-		var nicon = new MenuItem( { label : "Display Icon", type : MenuItemType.checkbox } );
-		for( m in [nedit, nins, nleft, nright, ndel, ndisp, nicon] )
-			n.append(m);
-
 		switch( c.type ) {
 		case TId, TString, TEnum(_), TFlags(_):
-			var conv = new MenuItem( { label : "Convert" } );
-			var cm = new Menu();
-			for( k in [
-				{ n : "lowercase", f : function(s:String) return s.toLowerCase() },
-				{ n : "UPPERCASE", f : function(s:String) return s.toUpperCase() },
-				{ n : "UpperIdent", f : function(s:String) return s.substr(0,1).toUpperCase() + s.substr(1) },
-				{ n : "lowerIdent", f : function(s:String) return s.substr(0, 1).toLowerCase() + s.substr(1) },
-			] ) {
-				var m = new MenuItem( { label : k.n } );
-				m.click = function() {
-
-					switch( c.type ) {
+			var caseConverts = [
+				"lowercase" => function(s:String) return s.toLowerCase(),
+				"UPPERCASE" => function(s:String) return s.toUpperCase(),
+				"UpperIdent" => function(s:String) return s.substr(0,1).toUpperCase() + s.substr(1),
+				"lowerIdent" => function(s:String) return s.substr(0, 1).toLowerCase() + s.substr(1),
+			];
+			IpcRenderer.removeAllListeners("column-convert-casing");
+			IpcRenderer.on("column-convert-casing", function(event, caseLabel) {
+				switch( c.type ) {
 					case TEnum(values), TFlags(values):
 						for( i in 0...values.length )
-							values[i] = k.f(values[i]);
+							values[i] = caseConverts[caseLabel](values[i]);
 					default:
 						var refMap = new Map();
 						for( obj in sheet.getLines() ) {
 							var t = Reflect.field(obj, c.name);
 							if( t != null && t != "" ) {
-								var t2 = k.f(t);
+								var t2 = caseConverts[caseLabel](t);
 								if( t2 == null && !c.opt ) t2 = "";
 								if( t2 == null )
 									Reflect.deleteField(obj, c.name);
@@ -812,62 +812,57 @@ class Main extends Model {
 						if( c.type == TId )
 							base.updateRefs(sheet, refMap);
 						sheet.sync(); // might have changed ID or DISP
-					}
+				}
 
-
-					refresh();
-					save();
-				};
-				cm.append(m);
-			}
-			conv.submenu = cm;
-			n.append(conv);
+				refresh();
+				save();
+			});
 		case TInt, TFloat:
-			var conv = new MenuItem( { label : "Convert" } );
-			var cm = new Menu();
-			for( k in [
-				{ n : "* 10", f : function(s:Float) return s * 10 },
-				{ n : "/ 10", f : function(s:Float) return s / 10 },
-				{ n : "+ 1", f : function(s:Float) return s + 1 },
-				{ n : "- 1", f : function(s:Float) return s - 1 },
-			] ) {
-				var m = new MenuItem( { label : k.n } );
-				m.click = function() {
-					for( obj in sheet.getLines() ) {
-						var t = Reflect.field(obj, c.name);
-						if( t != null ) {
-							var t2 = k.f(t);
-							if( c.type == TInt ) t2 = Std.int(t2);
-							Reflect.setField(obj, c.name, t2);
-						}
+			var operations = [
+				"* 10" => function(s:Float) return s * 10,
+				"/ 10" => function(s:Float) return s / 10,
+				"+ 1" => function(s:Float) return s + 1,
+				"- 1" => function(s:Float) return s - 1,
+			];
+			IpcRenderer.removeAllListeners("column-convert-number");
+			IpcRenderer.on("column-convert-number", function(event, operationLabel) {
+				for( obj in sheet.getLines() ) {
+					var t = Reflect.field(obj, c.name);
+					if( t != null ) {
+						var t2 = operations[operationLabel](t);
+						if( c.type == TInt ) t2 = Std.int(t2);
+						Reflect.setField(obj, c.name, t2);
 					}
-					refresh();
-					save();
-				};
-				cm.append(m);
-			}
-			conv.submenu = cm;
-			n.append(conv);
+				}
+				refresh();
+				save();
+			});
 		default:
 		}
+		
+		var ndispEnabled = false;
+		var niconEnabled = false;
 
-		ndisp.checked = sheet.props.displayColumn == c.name;
-		nicon.checked = sheet.props.displayIcon == c.name;
-
-		ndisp.enabled = false;
-		nicon.enabled = false;
 		switch( c.type ) {
 		case TString, TRef(_):
-			ndisp.enabled = true;
+			ndispEnabled = true;
 		case TTilePos:
-			nicon.enabled = true;
+			niconEnabled = true;
 		default:
 		}
 
-		nedit.click = function() {
+		IpcRenderer.removeAllListeners("column-edit");
+		IpcRenderer.on("column-edit", function() {
 			newColumn(sheet.name, c);
-		};
-		nleft.click = function() {
+		});
+
+		IpcRenderer.removeAllListeners("column-add");
+		IpcRenderer.on("column-add", function() {
+			newColumn(sheet.name, Lambda.indexOf(sheet.columns,c) + 1);
+		});
+
+		IpcRenderer.removeAllListeners("column-move-left");
+		IpcRenderer.on("column-move-left", function() {
 			var index = Lambda.indexOf(sheet.columns, c);
 			if( index > 0 ) {
 				sheet.columns.remove(c);
@@ -875,8 +870,10 @@ class Main extends Model {
 				refresh();
 				save();
 			}
-		};
-		nright.click = function() {
+		});
+
+		IpcRenderer.removeAllListeners("column-move-right");
+		IpcRenderer.on("column-move-right", function() {
 			var index = Lambda.indexOf(sheet.columns, c);
 			if( index < sheet.columns.length - 1 ) {
 				sheet.columns.remove(c);
@@ -884,12 +881,16 @@ class Main extends Model {
 				refresh();
 				save();
 			}
-		}
-		ndel.click = function() {
+		});
+
+		IpcRenderer.removeAllListeners("column-delete");
+		IpcRenderer.on("column-delete", function() {
 			if( !isProperties || js.Browser.window.confirm("Do you really want to delete this property for all objects?") )
 				deleteColumn(sheet, c.name);
-		};
-		ndisp.click = function() {
+		});
+
+		IpcRenderer.removeAllListeners("column-display");
+		IpcRenderer.on("column-display", function() {
 			if( sheet.props.displayColumn == c.name ) {
 				sheet.props.displayColumn = null;
 			} else {
@@ -898,8 +899,10 @@ class Main extends Model {
 			sheet.sync();
 			refresh();
 			save();
-		};
-		nicon.click = function() {
+		});
+
+		IpcRenderer.removeAllListeners("column-display-icon");
+		IpcRenderer.on("column-display-icon", function() {
 			if( sheet.props.displayIcon == c.name ) {
 				sheet.props.displayIcon = null;
 			} else {
@@ -908,44 +911,20 @@ class Main extends Model {
 			sheet.sync();
 			refresh();
 			save();
-		};
-		nins.click = function() {
-			newColumn(sheet.name, Lambda.indexOf(sheet.columns,c) + 1);
-		};
-		n.popup(mousePos.x, mousePos.y);
+		});
+
+		IpcRenderer.invoke("popupColumn", c.type.getName(), sheet.props.displayIcon == c.name, ndispEnabled, niconEnabled, {x : mousePos.x, y: mousePos.y});
 	}
 
 
 	function popupSheet( s : Sheet, li : JQuery ) {
-		var n = new Menu();
-		var nins = new MenuItem( { label : "Add Sheet" } );
-		var nleft = new MenuItem( { label : "Move Left" } );
-		var nright = new MenuItem( { label : "Move Right" } );
-		var nren = new MenuItem( { label : "Rename" } );
-		var ndel = new MenuItem( { label : "Delete" } );
-		var nindex = new MenuItem( { label : "Add Index", type : MenuItemType.checkbox } );
-		var ngroup = new MenuItem( { label : "Add Group", type : MenuItemType.checkbox } );
-		
-		var ncsv = new MenuItem( { label : "CSV..." } );
-		var csv = new Menu();
-		var importSheetCSV = new MenuItem( { label : "Import Sheet Data...", type : MenuItemType.checkbox } );
-		var exportSheetCSV = new MenuItem( { label : "Export Sheet Data...", type : MenuItemType.checkbox } );
-		csv.append(importSheetCSV);
-		csv.append(exportSheetCSV);
-		ncsv.submenu = csv;
+		IpcRenderer.removeAllListeners("sheet-add");
+		IpcRenderer.on("sheet-add", function() {
+			newSheet();
+		});
 
-		var njson = new MenuItem( { label : "JSON..." } );
-		var json = new Menu();
-		var importSheetJSON = new MenuItem( { label : "Import Sheet Data...", type : MenuItemType.checkbox } );
-		var exportSheetJSON = new MenuItem( { label : "Export Sheet Data...", type : MenuItemType.checkbox } );
-		json.append(importSheetJSON);
-		json.append(exportSheetJSON);
-		njson.submenu = json;
-		
-		for( m in [nins, nleft, nright, nren, ndel, nindex, ngroup, njson, ncsv] )
-			n.append(m);
-		
-		nleft.click = function() {
+		IpcRenderer.removeAllListeners("sheet-move-left");
+		IpcRenderer.on("sheet-move-left", function() {
 			var prev = -1;
 			for( i in 0...base.sheets.length ) {
 				var s2 = base.sheets[i];
@@ -959,8 +938,10 @@ class Main extends Model {
 			prefs.curSheet = prev;
 			initContent();
 			save();
-		};
-		nright.click = function() {
+		});
+		
+		IpcRenderer.removeAllListeners("sheet-move-right");
+		IpcRenderer.on("sheet-move-right", function() {
 			var sheets = [for( s in base.sheets ) if( !s.props.hide ) s];
 			var index = sheets.indexOf(s);
 			var next = sheets[index+1];
@@ -986,17 +967,22 @@ class Main extends Model {
 			prefs.curSheet = base.sheets.indexOf(s);
 			initContent();
 			save();
-		}
-		ndel.click = function() {
+		});
+
+		IpcRenderer.removeAllListeners("sheet-rename");
+		IpcRenderer.on("sheet-rename", function() {
+			li.dblclick();
+		});
+
+		IpcRenderer.removeAllListeners("sheet-delete");
+		IpcRenderer.on("sheet-delete", function() {
 			base.deleteSheet(s);
 			initContent();
 			save();
-		};
-		nins.click = function() {
-			newSheet();
-		};
-		nindex.checked = s.props.hasIndex;
-		nindex.click = function() {
+		});
+		
+		IpcRenderer.removeAllListeners("sheet-add-index");
+		IpcRenderer.on("sheet-add-index", function() {
 			if( s.props.hasIndex ) {
 				for( o in s.getLines() )
 					Reflect.deleteField(o, "index");
@@ -1010,9 +996,10 @@ class Main extends Model {
 				s.props.hasIndex = true;
 			}
 			save();
-		};
-		ngroup.checked = s.props.hasGroup;
-		ngroup.click = function() {
+		});
+
+		IpcRenderer.removeAllListeners("sheet-add-group");
+		IpcRenderer.on("sheet-add-group", function() {
 			if( s.props.hasGroup ) {
 				for( o in s.getLines() )
 					Reflect.deleteField(o, "group");
@@ -1026,43 +1013,16 @@ class Main extends Model {
 				s.props.hasGroup = true;
 			}
 			save();
-		};
-		nren.click = function() {
-			li.dblclick();
-		};
+		});
 
-		importSheetJSON.click = function() {
-			var i = J("<input>").attr("type", "file").css("display","none").change(function(e) {
-				var j = JTHIS;
-				this.importSheetJSON(s, j.val());
-				initContent();
-				j.remove();
-			});
-			i.appendTo(J("body"));
-			i.click();
-		};
-		exportSheetJSON.click = function() {
-			var i = J("<input>").attr("type", "file").attr("nwsaveas",'${s.name}.json').css("display","none").change(function(e) {
-				var j = JTHIS;
-				this.exportSheetJSON(s, j.val());
-				initContent();
-				j.remove();
-			});
-			i.appendTo(J("body"));
-			i.click();
-		};
-		
-		importSheetCSV.click = function() {
-			var i = J("<input>").attr("type", "file").css("display","none").change(function(e) {
-				var j = JTHIS;
-				this.importSheetCSV(s, j.val());
-				initContent();
-				j.remove();
-			});
-			i.appendTo(J("body"));
-			i.click();
-		};
-		exportSheetCSV.click = function() {
+		IpcRenderer.removeAllListeners("sheet-import-csv");
+		IpcRenderer.on("sheet-import-csv", function(event, file) {
+			this.importSheetCSV(s, file);
+			initContent();
+		});
+
+		IpcRenderer.removeAllListeners("sheet-export-csv");
+		IpcRenderer.on("sheet-export-csv", function() {
 			var i = J("<input>").attr("type", "file").attr("nwsaveas",'${s.name}.csv').css("display","none").change(function(e) {
 				var j = JTHIS;
 				this.exportSheetCSV(s, j.val());
@@ -1071,29 +1031,44 @@ class Main extends Model {
 			});
 			i.appendTo(J("body"));
 			i.click();
-		};
-		
-		if( s.isLevel() || (s.hasColumn("width", [TInt]) && s.hasColumn("height", [TInt]) && s.hasColumn("props",[TDynamic])) ) {
-			var nlevel = new MenuItem( { label : "Level", type : MenuItemType.checkbox } );
-			nlevel.checked = s.isLevel();
-			n.append(nlevel);
-			nlevel.click = function() {
-				if( s.isLevel() )
-					Reflect.deleteField(s.props, "level");
-				else
-					s.props.level = {
-						tileSets : {},
-					}
-				save();
-				refresh();
-			};
-		}
+		});
 
-		n.popup(mousePos.x, mousePos.y);
+		IpcRenderer.removeAllListeners("sheet-import-json");
+		IpcRenderer.on("sheet-import-json", function(event, file) {
+			this.importSheetJSON(s, file);
+			initContent();
+		});
+
+		IpcRenderer.removeAllListeners("sheet-export-json");
+		IpcRenderer.on("sheet-export-json", function() {
+			var i = J("<input>").attr("type", "file").attr("nwsaveas",'${s.name}.json').css("display","none").change(function(e) {
+				var j = JTHIS;
+				this.exportSheetJSON(s, j.val());
+				initContent();
+				j.remove();
+			});
+			i.appendTo(J("body"));
+			i.click();
+		});
+		
+		IpcRenderer.removeAllListeners("sheet-level");
+		IpcRenderer.on("sheet-level", function() {
+			if( s.isLevel() )
+				Reflect.deleteField(s.props, "level");
+			else
+				s.props.level = {
+					tileSets : {},
+				}
+			save();
+			refresh();
+		});
+
+		final showLevelCheckbox = s.isLevel() || (s.hasColumn("width", [TInt]) && s.hasColumn("height", [TInt]) && s.hasColumn("props",[TDynamic]));
+		IpcRenderer.invoke("popupSheet", showLevelCheckbox, s.props.hasIndex, s.props.hasGroup, s.isLevel(), {x : mousePos.x, y: mousePos.y});
 	}
 
 	public function editCell( c : Column, v : JQuery, sheet : Sheet, index : Int ) {
-		if( macEditMenu != null ) window.menu.append(macEditMenu);
+		// TODO: if( macEditMenu != null ) (Menu.getApplicationMenu() : Menu).items.push(cast macEditMenu);
 		var obj = sheet.lines[index];
 		var val : Dynamic = Reflect.field(obj, c.name);
 		var old = val;
@@ -1106,7 +1081,7 @@ class Main extends Model {
 		var html = getValue();
 		if( v.hasClass("edit") ) return;
 		function editDone() {
-			if( macEditMenu != null ) window.menu.remove(macEditMenu);
+			// TODO: if( macEditMenu != null ) (Menu.getApplicationMenu() : Menu).items.remove(cast macEditMenu);
 			v.html(html);
 			v.removeClass("edit");
 			setErrorMessage();
@@ -1485,6 +1460,7 @@ class Main extends Model {
 		fs.change(function(_) {
 			fs.off("change");
 			var path : String = fs.val();
+			trace(path);
 			fs.val("");
 			if( path == "" ) {
 				if( cancel != null ) cancel();
@@ -1507,6 +1483,7 @@ class Main extends Model {
 		var available = [];
 		var index = 0;
 		for( c in sheet.columns ) {
+			trace(c);
 			if( c.opt && !Reflect.hasField(props,c.name) ) {
 				available.push(c);
 				continue;
@@ -1600,6 +1577,7 @@ class Main extends Model {
 			e.stopPropagation();
 		});
 
+
 		var lines = [for( i in 0...sheet.lines.length ) {
 			var l = J("<tr>");
 			l.data("index", i);
@@ -1607,7 +1585,7 @@ class Main extends Model {
 			l.mousedown(function(e) {
 				if( e.which == 3 ) {
 					head.click();
-					haxe.Timer.delay(popupLine.bind(sheet,i),1);
+					haxe.Timer.delay(initializeLine.bind(sheet, i), 1);
 					e.preventDefault();
 					return;
 				}
@@ -2040,7 +2018,7 @@ class Main extends Model {
 	}
 
 	@:keep function openFile( file : String ) {
-		js.node.webkit.Shell.openItem(file);
+		electron.main.Dialog.showOpenDialog({ properties: ['openFile'] });
 	}
 
 	function setCursor( ?s, ?x=0, ?y=0, ?sel, update = true ) {
@@ -2281,6 +2259,7 @@ class Main extends Model {
 		if( cursor.s != null ) newLine(cursor.s);
 	}
 
+	@:keep
 	function createSheet( name : String, level : Bool ) {
 		name = StringTools.trim(name);
 		if( !base.r_ident.match(name) ) {
@@ -2544,34 +2523,23 @@ class Main extends Model {
 			refresh();
 	}
 
-	function initMenu() {
-		var modifier = "ctrl";
-		var menu = Menu.createWindowMenu();
-		if(Sys.systemName().indexOf("Mac") != -1) {
-			modifier = "cmd";
+function initMenu() {
+		IpcRenderer.on('open-recent', function(event, file) {
+			prefs.curFile = file;
+			load();
+		});
+
+		for( file in prefs.recent ) {
+			if( file == null ) continue;
+			IpcRenderer.invoke("add-recents-file", file);
 		}
-		var mfile = new MenuItem({ label : "File" });
-		var mfiles = new Menu();
-		var mnew = new MenuItem( { label : "New", key : "N", modifiers : modifier } );
-		var mopen = new MenuItem( { label : "Open...", key : "O", modifiers : modifier } );
-		var mrecent = new MenuItem( { label : "Recent Files" } );
-		var msave = new MenuItem( { label : "Save As...", key : "S", modifiers : "shift+" + modifier } );
-		var mclean = new MenuItem( { label : "Clean Images" } );
-		var mexport = new MenuItem( { label : "Export Localized texts" } );
-		mcompress = new MenuItem( { label : "Enable Compression", type : MenuItemType.checkbox } );
-		mcompress.click = function() {
-			base.compress = mcompress.checked;
-			save();
-		};
-		var mabout = new MenuItem( { label : "About" } );
-		var mexit = new MenuItem( { label : "Exit", key : "Q", modifiers : modifier } );
-		var mdebug = new MenuItem( { label : "Dev" } );
-		mnew.click = function() {
+
+		IpcRenderer.on('click-new', function() {
 			prefs.curFile = null;
 			load(true);
-		};
-		mdebug.click = function() window.showDevTools();
-		mopen.click = function() {
+		});
+
+		IpcRenderer.on('click-open', function() {
 			var i = J("<input>").attr("type", "file").css("display","none").change(function(e) {
 				var j = JTHIS;
 				prefs.curFile = j.val();
@@ -2580,8 +2548,9 @@ class Main extends Model {
 			});
 			i.appendTo(J("body"));
 			i.click();
-		};
-		msave.click = function() {
+		});
+
+		IpcRenderer.on('click-save', function() {
 			var i = J("<input>").attr("type", "file").attr("nwsaveas","new.cdb").css("display","none").change(function(e) {
 				var j = JTHIS;
 				prefs.curFile = j.val();
@@ -2590,8 +2559,9 @@ class Main extends Model {
 			});
 			i.appendTo(J("body"));
 			i.click();
-		};
-		mclean.click = function() {
+		});
+
+		IpcRenderer.on('click-clean', function() {
 			var lcount = @:privateAccess base.cleanLayers();
 			var icount = 0;
 			if( imageBank != null ) {
@@ -2602,36 +2572,15 @@ class Main extends Model {
 				if( count2 == 0 ) imageBank = null;
 			}
 			error([
-				lcount + " tileset data removed",
-				icount + " unused images removed"
+					lcount + " tileset data removed",
+					icount + " unused images removed"
 			].join("\n"));
 			refresh();
 			if( lcount > 0 ) save();
 			if( icount > 0 ) saveImages();
-		};
-		mexit.click = function() Sys.exit(0);
-		mabout.click = function() {
-			J("#about").show();
-		};
+		});
 
-		var mrecents = new Menu();
-		for( file in prefs.recent ) {
-			if( file == null ) continue;
-			var m = new MenuItem( { label : file } );
-			m.click = function() {
-				prefs.curFile = file;
-				load();
-			};
-			mrecents.append(m);
-		}
-		mrecent.submenu = mrecents;
-
-		for( m in [mnew, mopen, mrecent, msave, mclean, mcompress, mexport, mabout, mexit] )
-			mfiles.append(m);
-		mfile.submenu = mfiles;
-
-		mexport.click = function() {
-
+		IpcRenderer.on('click-export', function() {
 			var lang = new cdb.Lang(@:privateAccess base.data);
 			var xml = lang.buildXML();
 			var i = J("<input>").attr("type", "file").attr("nwsaveas","export.xml").css("display","none").change(function(e) {
@@ -2642,69 +2591,50 @@ class Main extends Model {
 			});
 			i.appendTo(J("body"));
 			i.click();
+		});
 
-		};
+		IpcRenderer.on('click-compression', function(event, checked) {
+			base.compress = checked;
+			save();
+		});
 
-		// create an edit menu
-		modifier = "ctrl+shift";
-		if(Sys.systemName().indexOf("Mac") != -1)
-			modifier = "cmd+shift";
+		IpcRenderer.on('click-about', function() {
+			J("#about").show();
+		});
 
-		var medit = new MenuItem({ label : "Database" });
-		var medits = new Menu();
-		var mnewsheet = new MenuItem( { label : "New Sheet", key : "N", modifiers : modifier } );
-		var mnewcolumn = new MenuItem( { label : "Add Column", key : "C", modifiers : modifier } );
-		var mnewline = new MenuItem( { label : "Add Line", key : "L", modifiers : modifier } );
-		var medittypes = new MenuItem( { label : "Edit Types", key : "E", modifiers : modifier } );
-		mnewcolumn.click = ()->newColumn();
-		mnewsheet.click = ()->newSheet();
-		medittypes.click = ()->editTypes();
-		mnewline.click = ()->insertLine();
+		IpcRenderer.on('click-new-sheet', function() newSheet());
+		IpcRenderer.on('click-add-column', function() newColumn());
+		IpcRenderer.on('click-add-line', function() insertLine());
+		IpcRenderer.on('click-edit-types', function() editTypes());
 
-		for(m in [mnewsheet, mnewcolumn, mnewline, medittypes])
-			medits.append(m);
-		medit.submenu = medits;
+		if( prefs.windowPos.x > 0 && prefs.windowPos.y > 0 ) IpcRenderer.invoke("setWindowPosition", prefs.windowPos.x, prefs.windowPos.y);
+		if( prefs.windowPos.w > 50 && prefs.windowPos.h > 50 ) IpcRenderer.invoke("setWindowSize", prefs.windowPos.w, prefs.windowPos.h);
+		if( prefs.windowPos.max ) IpcRenderer.invoke("maximize");
 
-		if(Sys.systemName().indexOf("Mac") != -1) {
-			menu.createMacBuiltin("CastleDB", {hideEdit: false, hideWindow: true}); // needed so copy&paste inside INPUTs work
-			menu.removeAt(0); // remove default menu
-			macEditMenu = menu.items[0]; // save default edit menu
-			menu.removeAt(0); // remove default edit menu
-			menu.insert(mfile, 0); // put it before the default Edit menu
-			mfiles.insert(mdebug, 7); // needs to go under File or it won't show
-			mfiles.insert(medit, 7); // needs to go under File or it won't show
-		}
-		else {
-			menu.append(mfile);
-			menu.append(medit);
-			menu.append(mdebug);
-		}
-
-		window.menu = menu;
-		if( prefs.windowPos.x > 0 && prefs.windowPos.y > 0 ) window.moveTo(prefs.windowPos.x, prefs.windowPos.y);
-		if( prefs.windowPos.w > 50 && prefs.windowPos.h > 50 ) window.resizeTo(prefs.windowPos.w, prefs.windowPos.h);
-		window.show();
-		if( prefs.windowPos.max ) window.maximize();
-		window.on('close', function() {
+		// TODO: electron message this
+		window.addEventListener('beforeunload', function() {
 			if( prefs.curFile == null && base.sheets.length > 0 ) {
 				if( !js.Browser.window.confirm("Do you want to exit without saving your changes?") )
 					return;
 			}
 			if( !prefs.windowPos.max )
+			IpcRenderer.send('getWindowGeometry');
+			IpcRenderer.on("windowGeometry", (event, size : {width : Int, height : Int, x : Int, y : Int}) -> {
 				prefs.windowPos = {
-					x : window.x,
-					y : window.y,
-					w : window.width,
-					h : window.height,
+					x : size.x,
+					y : size.y,
+					w : size.width,
+					h : size.height,
 					max : false,
 				};
+			});
 			savePrefs();
-			window.close(true);
+			window.close();
 		});
-		window.on('maximize', function() {
+		IpcRenderer.on('maximize', function() {
 			prefs.windowPos.max = true;
 		});
-		window.on('unmaximize', function() {
+		IpcRenderer.on('unmaximize', function() {
 			prefs.windowPos.max = false;
 		});
 	}
@@ -2731,7 +2661,7 @@ class Main extends Model {
 		lastSave = getFileTime();
 		super.load(noError);
 
-		window.title = "CastleDB Editor v1.6.2 - " + prefs.curFile;
+		js.Browser.document.title = "CastleDB Editor v1.6.2 - " + prefs.curFile;
 		J('.imagePreview').hide();
 
 		initContent();
@@ -2739,7 +2669,7 @@ class Main extends Model {
 		if( prefs.curFile != null )
 			prefs.recent.unshift(prefs.curFile);
 		if( prefs.recent.length > 8 ) prefs.recent.pop();
-		mcompress.checked = base.compress;
+		IpcRenderer.invoke("set-mcompress", base.compress);
 	}
 
 	override function save( history = true ) {
@@ -2750,6 +2680,7 @@ class Main extends Model {
 	public static var inst : Main;
 	static function main() {
 		untyped if( js.node.Fs.accessSync == null ) js.node.Fs.accessSync = function(path) if( !(js.node.Fs : Dynamic).existsSync(path) ) throw path + " does not exists";
+
 		inst = new Main();
 		Reflect.setField(js.Browser.window, "_", inst);
 	}
