@@ -507,7 +507,7 @@ class Level {
 						t.stride = Std.int(t.size * t.stride / size);
 						t.size = size;
 					}
-					t.file = path;
+					t.file = path.path;
 					currentLayer.dirty = true;
 					save();
 					reload();

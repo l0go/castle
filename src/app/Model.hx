@@ -70,6 +70,7 @@ class Model {
 	}
 
 	public function getAbsPath( file : String ) {
+		if (file == null || file == "") return "";
 		return file.charAt(0) == "/" || file.charAt(1) == ":" ? file : new haxe.io.Path(prefs.curFile).dir.split("\\").join("/") + "/" + file;
 	}
 

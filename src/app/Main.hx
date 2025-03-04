@@ -13,6 +13,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
  * IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+import haxe.io.Bytes;
 import cdb.Data;
 import cdb.Sheet;
 
@@ -281,6 +282,8 @@ class Main extends Model {
 			refresh();
 			save();
 		case K.UP:
+			trace(e.shiftKey);
+			trace(ctrlDown);
 			moveCursor(0, -1, e.shiftKey, ctrlDown);
 			e.preventDefault();
 		case K.DOWN:
@@ -681,15 +684,14 @@ class Main extends Model {
 			var id = UID++;
 			'<div class="color" style="background-color:#${StringTools.hex(v,6)}"></div>';
 		case TFile:
-			var path = getAbsPath(v);
-			var url = "file://" + path;
-			var ext = v.split(".").pop().toLowerCase();
-			var val = StringTools.htmlEscape(v);
-			var html = v == "" ? '<span class="error">#MISSING</span>' : '<span title="$val" onmouseover="_.onFileOver(\'$url\')" onmouseleave="_.onFileLeave(\'$url\')" >$val</span>';
-			if( v != "" && !quickExists(path) )
-				html = '<span class="error">' + html + '</span>';
+			var ext = v?.path?.split(".").pop().toLowerCase() ?? "";
+			var data = "data:image/" + ext + ";base64," + new haxe.crypto.BaseCode(haxe.io.Bytes.ofString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")).encodeBytes(v?.bytes ?? haxe.io.Bytes.alloc(0)).toString();
+			var html = v == "" ? '<span class="error">#MISSING</span>' : '<span title="${v.path}" onmouseover="_.onFileOver(\'$data\')" onmouseleave="_.onFileLeave(\'${v.path}\')" >${v.path}</span>';
+			// TODO
+			//if( v != "" && !quickExists(path) )
+				//html = '<span class="error">' + html + '</span>';
 			if( v != "" )
-				html += ' <i class="fa fa-external-link openfile" aria-hidden="true" onclick="_.openFile(\'$path\')"></i>';
+				html += ' <i class="fa fa-external-link openfile" aria-hidden="true" onclick="_.openFile(\'${v.path}\')"></i>';
 			html;
 		case TTilePos:
 			return tileHtml(v);
@@ -1305,6 +1307,7 @@ class Main extends Model {
 			} else {
 				var i = J("<input>").attr("type", "file").css("display","none").change(function(e) {
 					var j = JTHIS;
+					trace(j.val());
 					loadImage(j.val());
 					j.remove();
 				});
@@ -1443,36 +1446,11 @@ class Main extends Model {
 		return parts.join("/");
 	}
 
-	public function chooseFile( callb : String -> Void, ?cancel : Void -> Void ) {
-
-		if( prefs.curFile == null ) {
-			error("Please save CDB file first");
-			if( cancel != null ) cancel();
-			return;
-		}
-
-
-		var fs = J("#fileSelect");
-		if( fs.attr("nwworkingdir") == null )
-			fs.attr("nwworkingdir", new haxe.io.Path(prefs.curFile).dir);
-		fs.off("change");
-		fs.val("");
-		fs.change(function(_) {
-			fs.off("change");
-			var path : String = fs.val();
-			trace(path);
-			fs.val("");
-			if( path == "" ) {
-				if( cancel != null ) cancel();
-				return;
-			}
-			fs.attr("nwworkingdir", ""); // keep path
-
-			// make the path relative
-			var relPath = makeRelativePath(path);
-
-			callb(relPath);
-		}).click();
+	public function chooseFile( callb : {path: String, bytes: Bytes} -> Void ) {
+		IpcRenderer.invoke("chooseFileBytes", "fileChosen");
+		IpcRenderer.on("fileChosen", (event, path, bytes) -> {
+			callb(cast {path: path, bytes: bytes});
+		});
 	}
 
 	function fillProps( content : JQuery, sheet : Sheet, props : Dynamic ) {
@@ -1873,8 +1851,8 @@ class Main extends Model {
 						}
 
 						if( file == null ) {
-							chooseFile(function(path) {
-								file = path;
+							chooseFile(function(f) {
+								file = f.path;
 								setVal();
 								v.dblclick();
 							});
@@ -1919,7 +1897,7 @@ class Main extends Model {
 						dialog.find("[name=cancel]").click(function(_) dialog.remove());
 						dialog.find("[name=file]").click(function(_) {
 							chooseFile(function(f) {
-								file = f;
+								file = f.path;
 								dialog.remove();
 								setVal();
 								save();
@@ -2017,8 +1995,9 @@ class Main extends Model {
 		inTodo = false;
 	}
 
-	@:keep function openFile( file : String ) {
-		electron.main.Dialog.showOpenDialog({ properties: ['openFile'] });
+	function openFile( file : String ) {
+		trace(file);
+		electron.Shell.openPath(file);
 	}
 
 	function setCursor( ?s, ?x=0, ?y=0, ?sel, update = true ) {

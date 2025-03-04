@@ -66,9 +66,12 @@ class Main {
 				win.webContents.send("unmaximize");
 			});
 
-			win.on("openFile", (event, channel) -> {
+			IpcMain.handle("chooseFileBytes", (event, channel) -> {
 				Dialog.showOpenDialog({ properties: ['openFile'] }).then((response) -> {
-					window.webContents.send(channel, sys.io.File.getContent(untyped response.filePaths[0]));
+					trace(untyped response.filePaths[0]);
+					if (untyped response.filePaths[0] != null) {
+						win.webContents.send(channel, untyped response.filePaths[0], sys.io.File.getBytes(untyped response.filePaths[0]));
+					}
 				});
 			});
 
@@ -324,7 +327,9 @@ class Main {
 		var importSheetCSV = new MenuItem( { label : "Import Sheet Data...", role : "checkbox" } );
 		importSheetCSV.click = () -> {
 			Dialog.showOpenDialog({ properties: ['openFile'] }).then((response) -> {
-				window.webContents.send("sheet-import-csv", sys.io.File.getContent(untyped response.filePaths[0]));
+				if (untyped response.filePaths[0] != null) {
+					window.webContents.send("sheet-import-csv", sys.io.File.getContent(untyped response.filePaths[0]));
+				}
 			});
 		};
 
@@ -343,7 +348,9 @@ class Main {
 		var importSheetJSON = new MenuItem( { label : "Import Sheet Data...", role : "checkbox" } );
 		importSheetJSON.click = () -> {
 			Dialog.showOpenDialog({ properties: ['openFile'] }).then((response) -> {
-				window.webContents.send("sheet-import-json", sys.io.File.getContent(untyped response.filePaths[0]));
+				if (untyped response.filePaths[0] != null) {
+					window.webContents.send("sheet-import-json", sys.io.File.getContent(untyped response.filePaths[0]));
+				}
 			});
 		};
 
