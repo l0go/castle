@@ -543,20 +543,22 @@ class Main extends Model {
 
 	function tileHtml( v : cdb.Types.TilePos, ?isInline ) {
 		var path = getAbsPath(v.file);
-		if( !quickExists(path) ) {
-			if( isInline ) return "";
-			return '<span class="error">' + v.file + '</span>';
-		}
-		var id = UID++;
-		var width = v.size * (v.width == null?1:v.width);
-		var height = v.size * (v.height == null?1:v.height);
-		var max = width > height ? width : height;
-		var zoom = max <= 32 ? 2 : 64 / max;
-		var inl = isInline ? 'display:inline-block;' : '';
-		var url = "file://" + path;
-		var html = '<div class="tile" id="_c${id}" style="width : ${Std.int(width * zoom)}px; height : ${Std.int(height * zoom)}px; background : url(\'$url\') -${Std.int(v.size*v.x*zoom)}px -${Std.int(v.size*v.y*zoom)}px; opacity:0; $inl"></div>';
-		html += '<img src="$url" style="display:none" onload="$(\'#_c$id\').css({opacity:1, backgroundSize : ((this.width*$zoom)|0)+\'px \' + ((this.height*$zoom)|0)+\'px\' '+(zoom > 1 ? ", imageRendering : 'pixelated'" : "") +'}); if( this.parentNode != null ) this.parentNode.removeChild(this)"/>';
-		return html;
+		var html = "";
+		return IpcRenderer.invoke("exists", path).then(cast((bool: Bool) -> if (bool) {
+			html = '<span class="error">' + v.file + '</span>';
+		} else {
+			var id = UID++;
+			var width = v.size * (v.width == null?1:v.width);
+			var height = v.size * (v.height == null?1:v.height);
+			var max = width > height ? width : height;
+			var zoom = max <= 32 ? 2 : 64 / max;
+			var inl = isInline ? 'display:inline-block;' : '';
+			var url = "file://" + path;
+			html = '<div class="tile" id="_c${id}" style="width : ${Std.int(width * zoom)}px; height : ${Std.int(height * zoom)}px; background : url(\'$url\') -${Std.int(v.size*v.x*zoom)}px -${Std.int(v.size*v.y*zoom)}px; opacity:0; $inl"></div>';
+			html += '<img src="$url" style="display:none" onload="$(\'#_c$id\').css({opacity:1, backgroundSize : ((this.width*$zoom)|0)+\'px \' + ((this.height*$zoom)|0)+\'px\' '+(zoom > 1 ? ", imageRendering : 'pixelated'" : "") +'}); if( this.parentNode != null ) this.parentNode.removeChild(this)"/>';
+		})).then(() -> {
+			return html;
+		});
 	}
 
 	public function valueHtml( c : Column, v : Dynamic, sheet : Sheet, obj : Dynamic ) : String {
@@ -589,6 +591,9 @@ class Main extends Model {
 			else {
 				var s = base.getSheet(sname);
 				var i = s.index.get(v);
+				if (i == null) {
+
+				}
 				i == null ? '<span class="error">#REF($v)</span>' : (i.ico == null ? "" : tileHtml(i.ico,true)+" ") + StringTools.htmlEscape(i.disp);
 			}
 		case TBool:
@@ -675,9 +680,9 @@ class Main extends Model {
 			var ext = v?.path?.split(".").pop().toLowerCase() ?? "";
 			var data = "data:image/" + ext + ";base64," + new haxe.crypto.BaseCode(haxe.io.Bytes.ofString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")).encodeBytes(v?.bytes ?? haxe.io.Bytes.alloc(0)).toString();
 			var html = v == "" ? '<span class="error">#MISSING</span>' : '<span title="${v.path}" onmouseover="_.onFileOver(\'$data\')" onmouseleave="_.onFileLeave(\'${v.path}\')" >${v.path}</span>';
-			// TODO
-			//if( v != "" && !quickExists(path) )
-				//html = '<span class="error">' + html + '</span>';
+			IpcRenderer.invoke("exists", path).then((bool) -> if (v != "" && bool) {
+				html = '<span class="error">' + html + '</span>';
+			});
 			if( v != "" )
 				html += ' <i class="fa fa-external-link openfile" aria-hidden="true" onclick="_.openFile(\'${v.path}\')"></i>';
 			html;
@@ -686,10 +691,11 @@ class Main extends Model {
 		case TTileLayer:
 			var v : cdb.Types.TileLayer = v;
 			var path = getAbsPath(v.file);
-			if( !quickExists(path) )
+			IpcRenderer.invoke("exists", path).then((bool) -> if (bool) {
 				'<span class="error">' + v.file + '</span>';
-			else
+			} else {
 				'#DATA';
+			});
 		case TDynamic:
 			var str = Std.string(v).split("\n").join(" ").split("\t").join("");
 			if( str.length > 50 ) str = str.substr(0, 47) + "...";
@@ -1013,14 +1019,7 @@ class Main extends Model {
 
 		IpcRenderer.removeAllListeners("sheet-export-csv");
 		IpcRenderer.on("sheet-export-csv", function() {
-			var i = J("<input>").attr("type", "file").attr("nwsaveas",'${s.name}.csv').css("display","none").change(function(e) {
-				var j = JTHIS;
-				this.exportSheetCSV(s, j.val());
-				initContent();
-				j.remove();
-			});
-			i.appendTo(J("body"));
-			i.click();
+			this.exportSheetCSV(s);
 		});
 
 		IpcRenderer.removeAllListeners("sheet-import-json");
@@ -1058,7 +1057,6 @@ class Main extends Model {
 	}
 
 	public function editCell( c : Column, v : JQuery, sheet : Sheet, index : Int ) {
-		// TODO: if( macEditMenu != null ) (Menu.getApplicationMenu() : Menu).items.push(cast macEditMenu);
 		var obj = sheet.lines[index];
 		var val : Dynamic = Reflect.field(obj, c.name);
 		var old = val;
@@ -1071,7 +1069,6 @@ class Main extends Model {
 		var html = getValue();
 		if( v.hasClass("edit") ) return;
 		function editDone() {
-			// TODO: if( macEditMenu != null ) (Menu.getApplicationMenu() : Menu).items.remove(cast macEditMenu);
 			v.html(html);
 			v.removeClass("edit");
 			setErrorMessage();
@@ -2575,29 +2572,30 @@ function initMenu() {
 		if( prefs.windowPos.w > 50 && prefs.windowPos.h > 50 ) IpcRenderer.invoke("setWindowSize", prefs.windowPos.w, prefs.windowPos.h);
 		if( prefs.windowPos.max ) IpcRenderer.invoke("maximize");
 
-		// TODO: electron message this
 		window.addEventListener('beforeunload', function() {
 			if( prefs.curFile == null && base.sheets.length > 0 ) {
 				if( !js.Browser.window.confirm("Do you want to exit without saving your changes?") )
 					return;
 			}
-			if( !prefs.windowPos.max )
-			IpcRenderer.send('getWindowGeometry');
-			IpcRenderer.on("windowGeometry", (event, size : {width : Int, height : Int, x : Int, y : Int}) -> {
-				prefs.windowPos = {
-					x : size.x,
-					y : size.y,
-					w : size.width,
-					h : size.height,
-					max : false,
-				};
-			});
+			if( !prefs.windowPos.max ) {
+				IpcRenderer.invoke('getWindowGeometry').then(cast((size : {width : Int, height : Int, x : Int, y : Int}) -> {
+					prefs.windowPos = {
+						x : size.x,
+						y : size.y,
+						w : size.width,
+						h : size.height,
+						max : false,
+					};
+				}));
+			}
 			savePrefs();
 			window.close();
 		});
+
 		IpcRenderer.on('maximize', function() {
 			prefs.windowPos.max = true;
 		});
+
 		IpcRenderer.on('unmaximize', function() {
 			prefs.windowPos.max = false;
 		});

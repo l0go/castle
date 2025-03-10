@@ -15,6 +15,7 @@
  */
 import cdb.Data;
 import thx.csv.*;
+import electron.renderer.IpcRenderer;
 
 using StringTools;
 
@@ -49,20 +50,6 @@ class Model {
 		};
 		existsCache = new Map();
 		loadPrefs();
-	}
-
-	function quickExists(path) {
-		var c = existsCache.get(path);
-		if( c == null ) {
-			c = { t : -1e9, r : false };
-			existsCache.set(path, c);
-		}
-		var t = haxe.Timer.stamp();
-		if( c.t < t - 10 ) { // cache result for 10s
-			c.r = sys.FileSystem.exists(path);
-			c.t = t;
-		}
-		return c.r;
 	}
 
 	public function getImageData( key : String ) : String {
@@ -245,7 +232,7 @@ class Model {
 		this.save();
 	}
 
-	function exportSheetCSV(_s:cdb.Sheet, _filePath:String) {
+	function exportSheetCSV(_s:cdb.Sheet) {
 		var lines = [[ for (c in _s.columns) c.name]];		
 
 		for (l in _s.getLines()) {
@@ -260,14 +247,15 @@ class Model {
 			}
 			lines.push(ol);
 		}
-		sys.io.File.saveContent(_filePath, Csv.encode(lines));
+
+		IpcRenderer.invoke("saveFile", '${_s.name}.csv', Csv.encode(lines));
 	}
 
 	@:access(cdb.Sheet)
 	function importSheetCSV(_s:cdb.Sheet, _contents:String) {
 		var d = Csv.decode(_contents);
 		trace(d);
-		var header = d.shift(); // get rid off first line
+		var header = d.shift(); // get rid of first line
 
 		var colMapSheet = new Map<String, Column>();
 		for (c in _s.columns)

@@ -1,5 +1,6 @@
 package;
 
+import sys.io.File;
 import cdb.Data.ColumnType;
 
 import electron.main.Dialog;
@@ -23,7 +24,7 @@ class Main {
 			IpcMain.handle("getWindowGeometry", (event) -> {
 				final size = win.getSize();
 				final pos = win.getPosition();
-				event.reply("windowGeometry", {width : size[0], height : size[1], x : pos[0], y : pos[1]});
+				return {width : size[0], height : size[1], x : pos[0], y : pos[1]};
 			});
 
 			IpcMain.handle("setWindowPosition", (event, x, y) -> {
@@ -81,7 +82,16 @@ class Main {
 				});
 			});
 
-			IpcMain.handle("saveFileBytes", (event, saveAs, images) -> {
+			IpcMain.handle("saveFile", (event, saveAs, text) -> {
+				var path = Dialog.showSaveDialogSync({
+					defaultPath: saveAs,
+					properties: ['createDirectory', 'showOverwriteConfirmation'],
+				});
+				File.saveContent(path, text);
+			});
+
+			IpcMain.handle("exists", (event, path) -> {
+				return sys.FileSystem.exists(path);
 			});
 
 			initMenu(win);
