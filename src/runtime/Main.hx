@@ -1,8 +1,8 @@
 package;
 
-import electron.main.Dialog;
 import cdb.Data.ColumnType;
 
+import electron.main.Dialog;
 import electron.main.App;
 import electron.main.BrowserWindow;
 import electron.main.IpcMain;
@@ -66,13 +66,22 @@ class Main {
 				win.webContents.send("unmaximize");
 			});
 
-			IpcMain.handle("chooseFileBytes", (event, channel) -> {
-				Dialog.showOpenDialog({ properties: ['openFile'] }).then((response) -> {
-					trace(untyped response.filePaths[0]);
+			IpcMain.handle("chooseFileBytes", (event, channel, images) -> {
+				var filters = [];
+				if (images) filters.push({name: "Filetype", extensions: ["jpeg", "png", "gif", "jpg"]});
+				Dialog.showOpenDialog({
+					{
+						filters: filters,
+						properties: ['openFile'],
+					}
+				}).then((response) -> {
 					if (untyped response.filePaths[0] != null) {
 						win.webContents.send(channel, untyped response.filePaths[0], sys.io.File.getBytes(untyped response.filePaths[0]));
 					}
 				});
+			});
+
+			IpcMain.handle("saveFileBytes", (event, saveAs, images) -> {
 			});
 
 			initMenu(win);

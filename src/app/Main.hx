@@ -20,7 +20,6 @@ import cdb.Sheet;
 import js.jquery.Helper.*;
 import js.jquery.JQuery;
 
-//import electron.main.BrowserWindow;
 import electron.renderer.IpcRenderer;
 
 private typedef Cursor = {
@@ -76,17 +75,6 @@ class Main extends Model {
 		super();
 
 		window = js.Browser.window;
-
-		/*
-		window = new BrowserWindow({
-			webPreferences: {
-				nodeIntegration: true,
-				contextIsolation: false
-			}
-		});
-		window.loadFile("index.html");
-		window.webContents.openDevTools({ mode: 'detach' });
-		**/
 
 		window.addEventListener("resize", onResize);
 		window.addEventListener("focus", function(_) IpcRenderer.invoke("clearCache"));
@@ -1283,14 +1271,13 @@ class Main extends Model {
 			v.html(getValue());
 			changed();
 		case TImage:
-			inline function loadImage(file : String) {
-				var ext = file.split(".").pop().toLowerCase();
+			inline function loadImage(fileName: String, bytes: Bytes) {
+				var ext = fileName.split(".").pop().toLowerCase();
 				if( ext == "jpeg" ) ext = "jpg";
 				if( ext != "png" && ext != "gif" && ext != "jpg" ) {
 					error("Unsupported image extension " + ext);
 					return;
 				}
-				var bytes = sys.io.File.getBytes(file);
 				var md5 = haxe.crypto.Md5.make(bytes).toHex();
 				if( imageBank == null ) imageBank = { };
 				if( !Reflect.hasField(imageBank, md5) ) {
@@ -1302,18 +1289,16 @@ class Main extends Model {
 				v.html(getValue());
 				changed();
 			}
+			// TODO: Readd file drop support
+			/**
 			if ( untyped v.dropFile != null ) {
-				loadImage(untyped v.dropFile);
-			} else {
-				var i = J("<input>").attr("type", "file").css("display","none").change(function(e) {
-					var j = JTHIS;
-					trace(j.val());
-					loadImage(j.val());
-					j.remove();
-				});
-				i.appendTo(J("body"));
-				i.click();
-			}
+				trace(untyped v.dropFile);
+				//loadImage(untyped v.dropFile);
+			} else {*/
+				chooseFile(function(f) {
+					loadImage(f.path, f.bytes);
+				}, true);
+			//}
 		case TFlags(values):
 			var div = J("<div>").addClass("flagValues");
 			div.click(function(e) e.stopPropagation()).dblclick(function(e) e.stopPropagation());
@@ -1446,8 +1431,8 @@ class Main extends Model {
 		return parts.join("/");
 	}
 
-	public function chooseFile( callb : {path: String, bytes: Bytes} -> Void ) {
-		IpcRenderer.invoke("chooseFileBytes", "fileChosen");
+	public function chooseFile( callb : {path: String, bytes: Bytes} -> Void, ?images: Bool = false) {
+		IpcRenderer.invoke("chooseFileBytes", "fileChosen", images);
 		IpcRenderer.on("fileChosen", (event, path, bytes) -> {
 			callb(cast {path: path, bytes: bytes});
 		});
