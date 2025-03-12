@@ -655,7 +655,9 @@ class Level {
 
 
 	public function onResize() {
-		content.find(".scroll").css("height", ((electron.main.BrowserWindow.getFocusedWindow() : electron.main.BrowserWindow).getBounds().height - 240) + "px");
+		IpcRenderer.invoke('getWindowGeometry').then(cast((size : {width : Int, height : Int, x : Int, y : Int}) -> {
+			content.find(".scroll").css("height", (height - 240) + "px");
+		}));
 	}
 
 	function setSort( j : JQuery, callb : { ref : Dynamic -> Void } ) {

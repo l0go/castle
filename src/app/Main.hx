@@ -541,24 +541,23 @@ class Main extends Model {
 			J(".errorMsg").text(msg).show();
 	}
 
-	function tileHtml( v : cdb.Types.TilePos, ?isInline ) {
+	function tileHtml( v : cdb.Types.TilePos, ?isInline ): String {
 		var path = getAbsPath(v.file);
-		var html = "";
-		return IpcRenderer.invoke("exists", path).then(cast((bool: Bool) -> if (bool) {
-			html = '<span class="error">' + v.file + '</span>';
-		} else {
-			var id = UID++;
-			var width = v.size * (v.width == null?1:v.width);
-			var height = v.size * (v.height == null?1:v.height);
-			var max = width > height ? width : height;
-			var zoom = max <= 32 ? 2 : 64 / max;
-			var inl = isInline ? 'display:inline-block;' : '';
-			var url = "file://" + path;
-			html = '<div class="tile" id="_c${id}" style="width : ${Std.int(width * zoom)}px; height : ${Std.int(height * zoom)}px; background : url(\'$url\') -${Std.int(v.size*v.x*zoom)}px -${Std.int(v.size*v.y*zoom)}px; opacity:0; $inl"></div>';
-			html += '<img src="$url" style="display:none" onload="$(\'#_c$id\').css({opacity:1, backgroundSize : ((this.width*$zoom)|0)+\'px \' + ((this.height*$zoom)|0)+\'px\' '+(zoom > 1 ? ", imageRendering : 'pixelated'" : "") +'}); if( this.parentNode != null ) this.parentNode.removeChild(this)"/>';
-		})).then(() -> {
-			return html;
-		});
+		if ( !quickExists(path) ) {
+			if( isInline ) return "";
+			return '<span class="error">' + v.file + '</span>';
+		}
+		var id = UID++;
+		var width = v.size * (v.width == null?1:v.width);
+		var height = v.size * (v.height == null?1:v.height);
+		var max = width > height ? width : height;
+		var zoom = max <= 32 ? 2 : 64 / max;
+		var inl = isInline ? 'display:inline-block;' : '';
+		var url = "file://" + path;
+		var html = '<div class="tile" id="_c${id}" style="width : ${Std.int(width * zoom)}px; height : ${Std.int(height * zoom)}px; background : url(\'$url\') -${Std.int(v.size*v.x*zoom)}px -${Std.int(v.size*v.y*zoom)}px; opacity:0; $inl"></div>';
+		html += '<img src="$url" style="display:none" onload="$(\'#_c$id\').css({opacity:1, backgroundSize : ((this.width*$zoom)|0)+\'px \' + ((this.height*$zoom)|0)+\'px\' '+(zoom > 1 ? ", imageRenderin
+			g : 'pixelated'" : "") +'}); if( this.parentNode != null ) this.parentNode.removeChild(this)"/>';
+		return html;
 	}
 
 	public function valueHtml( c : Column, v : Dynamic, sheet : Sheet, obj : Dynamic ) : String {
@@ -568,138 +567,133 @@ class Main extends Model {
 			return '<span class="error">#NULL</span>';
 		}
 		return switch( c.type ) {
-		case TInt:
-			switch (c.display) {
-				case Percent:
-					'<span>$v%</span> <div style="display: inline-block; position: relative; width: 40px; height: 8px; background-color: rgba(80, 158, 227, 0.2); border-radius: 3px;"><div style="position: absolute; top: 0px; bottom: 0px; background-color: rgb(80, 158, 227); width: $v%; left: 0px; border-radius: 3px;"></div></div>';
-				default: '$v';
-			} 
-		case TFloat:
-			switch( c.display ) {
-				case Percent:
-					var percent = (Math.round(v * 10000)/100); 
-					'<span>${percent}%</span> <div style="display: inline-block; position: relative; width: 40px; height: 8px; background-color: rgba(80, 158, 227, 0.2); border-radius: 3px;"><div style="position: absolute; top: 0px; bottom: 0px; background-color: rgb(80, 158, 227); width: $percent%; left: 0px; border-radius: 3px;"></div></div>';
-				default: '$v';
-			}
-		case TId:
-			v == "" ? '<span class="error">#MISSING</span>' : (base.getSheet(sheet.name).index.get(v).obj == obj ? v : '<span class="error">#DUP($v)</span>');
-		case TString, TLayer(_):
-			v == "" ? "&nbsp;" : StringTools.htmlEscape(v);
-		case TRef(sname):
-			if( v == "" )
-				'<span class="error">#MISSING</span>';
-			else {
-				var s = base.getSheet(sname);
-				var i = s.index.get(v);
-				if (i == null) {
-
+			case TInt:
+				switch (c.display) {
+					case Percent:
+						'<span>$v%</span> <div style="display: inline-block; position: relative; width: 40px; height: 8px; background-color: rgba(80, 158, 227, 0.2); border-radius: 3px;"><div style="position: absolute; top: 0px; bottom: 0px; background-color: rgb(80, 158, 227); width: $v%; left: 0px; border-radius: 3px;"></div></div>';
+					default: '$v';
+				} 
+			case TFloat:
+				switch( c.display ) {
+					case Percent:
+						var percent = (Math.round(v * 10000)/100); 
+						'<span>${percent}%</span> <div style="display: inline-block; position: relative; width: 40px; height: 8px; background-color: rgba(80, 158, 227, 0.2); border-radius: 3px;"><div style="position: absolute; top: 0px; bottom: 0px; background-color: rgb(80, 158, 227); width: $percent%; left: 0px; border-radius: 3px;"></div></div>';
+					default: '$v';
 				}
-				i == null ? '<span class="error">#REF($v)</span>' : (i.ico == null ? "" : tileHtml(i.ico,true)+" ") + StringTools.htmlEscape(i.disp);
-			}
-		case TBool:
-			// v ? '&#x2611;' : '&#9744;';
-			v ? '<i class="fa fa-check-square-o" aria-hidden="true"></i>' : '<i class="fa fa-square-o" aria-hidden="true"></i>';
-		case TEnum(values):
-			values[v];
-		case TImage:
-			if( v == "" )
-				'<span class="error">#MISSING</span>'
-			else {
-				var data = Reflect.field(imageBank, v);
-				if( data == null )
-					'<span class="error">#NOTFOUND($v)</span>'
-				else
-					'<img src="$data"/>';
-			}
-		case TList:
-			var a : Array<Dynamic> = v;
-			var ps = sheet.getSub(c);
-			var out : Array<String> = [];
-			var size = 0;
-			for( v in a ) {
-				var vals = [];
-				for( c in ps.columns )
-					switch( c.type ) {
-					case TList, TProperties:
-						continue;
-					default:
-						vals.push(valueHtml(c, Reflect.field(v, c.name), ps, v));
+			case TId:
+				v == "" ? '<span class="error">#MISSING</span>' : (base.getSheet(sheet.name).index.get(v).obj == obj ? v : '<span class="error">#DUP($v)</span>');
+			case TString, TLayer(_):
+				v == "" ? "&nbsp;" : StringTools.htmlEscape(v);
+			case TRef(sname):
+				if( v == "" )
+					'<span class="error">#MISSING</span>';
+				else {
+					var s = base.getSheet(sname);
+					var i = s.index.get(v);
+					i == null ? '<span class="error">#REF($v)</span>' : (i.ico == null ? "" : tileHtml(i.ico,true)+" ") + StringTools.htmlEscape(i.disp);
+				}
+			case TBool:
+				// v ? '&#x2611;' : '&#9744;';
+				v ? '<i class="fa fa-check-square-o" aria-hidden="true"></i>' : '<i class="fa fa-square-o" aria-hidden="true"></i>';
+			case TEnum(values):
+				values[v];
+			case TImage:
+				if( v == "" )
+					'<span class="error">#MISSING</span>'
+				else {
+					var data = Reflect.field(imageBank, v);
+					if( data == null )
+						'<span class="error">#NOTFOUND($v)</span>'
+					else
+						'<img src="$data"/>';
+				}
+			case TList:
+				var a : Array<Dynamic> = v;
+				var ps = sheet.getSub(c);
+				var out : Array<String> = [];
+				var size = 0;
+				for( v in a ) {
+					var vals = [];
+					for( c in ps.columns )
+						switch( c.type ) {
+							case TList, TProperties:
+								continue;
+							default:
+								vals.push(valueHtml(c, Reflect.field(v, c.name), ps, v));
+						}
+					var v = vals.length == 1 ? vals[0] : vals.join(", ");
+					if( size > 200 ) {
+						out.push("...");
+						break;
 					}
-				var v = vals.length == 1 ? vals[0] : vals.join(", ");
-				if( size > 200 ) {
-					out.push("...");
-					break;
+					var vstr = v;
+					if( v.indexOf("<") >= 0 ) {
+						vstr = ~/<img src="[^"]+" style="display:none"[^>]+>/g.replace(vstr, "");
+						vstr = ~/<img src="[^"]+"\/>/g.replace(vstr, "[I]");
+						vstr = ~/<div id="[^>]+><\/div>/g.replace(vstr, "[D]");
+					}
+					size += vstr.length;
+					out.push(v);
 				}
-				var vstr = v;
-				if( v.indexOf("<") >= 0 ) {
-					vstr = ~/<img src="[^"]+" style="display:none"[^>]+>/g.replace(vstr, "");
-					vstr = ~/<img src="[^"]+"\/>/g.replace(vstr, "[I]");
-					vstr = ~/<div id="[^>]+><\/div>/g.replace(vstr, "[D]");
-				}
-				size += vstr.length;
-				out.push(v);
-			}
-			if( out.length == 0 )
-				return '[]';
-			return '[${out.join(", ")}]';
-		case TProperties:
-			var ps = sheet.getSub(c);
-			var out = [];
-			for( c in ps.columns ) {
-				var pval = Reflect.field(v, c.name);
-				if( pval == null && c.opt ) continue;
-				out.push(c.name+" : "+valueHtml(c, pval, ps, v));
-			}
-			return out.join("<br/>");
-		case TCustom(name):
-			var t = base.getCustomType(name);
-			var a : Array<Dynamic> = v;
-			var cas = t.cases[a[0]];
-			var str = cas.name;
-			if( cas.args.length > 0 ) {
-				str += "(";
+				if( out.length == 0 )
+					return '[]';
+				return '[${out.join(", ")}]';
+			case TProperties:
+				var ps = sheet.getSub(c);
 				var out = [];
-				var pos = 1;
-				for( i in 1...a.length )
-					out.push(valueHtml(cas.args[i-1], a[i], sheet, this));
-				str += out.join(",");
-				str += ")";
-			}
-			str;
-		case TFlags(values):
-			var v : Int = v;
-			var flags = [];
-			for( i in 0...values.length )
-				if( v & (1 << i) != 0 )
-					flags.push(StringTools.htmlEscape(values[i]));
-			flags.length == 0 ? String.fromCharCode(0x2205) : flags.join("|<wbr>");
-		case TColor:
-			var id = UID++;
-			'<div class="color" style="background-color:#${StringTools.hex(v,6)}"></div>';
-		case TFile:
-			var ext = v?.path?.split(".").pop().toLowerCase() ?? "";
-			var data = "data:image/" + ext + ";base64," + new haxe.crypto.BaseCode(haxe.io.Bytes.ofString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")).encodeBytes(v?.bytes ?? haxe.io.Bytes.alloc(0)).toString();
-			var html = v == "" ? '<span class="error">#MISSING</span>' : '<span title="${v.path}" onmouseover="_.onFileOver(\'$data\')" onmouseleave="_.onFileLeave(\'${v.path}\')" >${v.path}</span>';
-			IpcRenderer.invoke("exists", path).then((bool) -> if (v != "" && bool) {
-				html = '<span class="error">' + html + '</span>';
-			});
-			if( v != "" )
-				html += ' <i class="fa fa-external-link openfile" aria-hidden="true" onclick="_.openFile(\'${v.path}\')"></i>';
-			html;
-		case TTilePos:
-			return tileHtml(v);
-		case TTileLayer:
-			var v : cdb.Types.TileLayer = v;
-			var path = getAbsPath(v.file);
-			IpcRenderer.invoke("exists", path).then((bool) -> if (bool) {
-				'<span class="error">' + v.file + '</span>';
-			} else {
-				'#DATA';
-			});
-		case TDynamic:
-			var str = Std.string(v).split("\n").join(" ").split("\t").join("");
-			if( str.length > 50 ) str = str.substr(0, 47) + "...";
-			str;
+				for( c in ps.columns ) {
+					var pval = Reflect.field(v, c.name);
+					if( pval == null && c.opt ) continue;
+					out.push(c.name+" : "+valueHtml(c, pval, ps, v));
+				}
+				return out.join("<br/>");
+			case TCustom(name):
+				var t = base.getCustomType(name);
+				var a : Array<Dynamic> = v;
+				var cas = t.cases[a[0]];
+				var str = cas.name;
+				if( cas.args.length > 0 ) {
+					str += "(";
+					var out = [];
+					var pos = 1;
+					for( i in 1...a.length )
+						out.push(valueHtml(cas.args[i-1], a[i], sheet, this));
+					str += out.join(",");
+					str += ")";
+				}
+				str;
+			case TFlags(values):
+				var v : Int = v;
+				var flags = [];
+				for( i in 0...values.length )
+					if( v & (1 << i) != 0 )
+						flags.push(StringTools.htmlEscape(values[i]));
+				flags.length == 0 ? String.fromCharCode(0x2205) : flags.join("|<wbr>");
+			case TColor:
+				var id = UID++;
+				'<div class="color" style="background-color:#${StringTools.hex(v,6)}"></div>';
+			case TFile:
+				var ext = v?.path?.split(".").pop().toLowerCase() ?? "";
+				var data = "data:image/" + ext + ";base64," + new haxe.crypto.BaseCode(haxe.io.Bytes.ofString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")).encodeBytes(v?.bytes ?? haxe.io.Bytes.alloc(0)).toString();
+				var html = v == "" ? '<span class="error">#MISSING</span>' : '<span title="${v.path}" onmouseover="_.onFileOver(\'$data\')" onmouseleave="_.onFileLeave(\'${v.path}\')" >${v.path}</span>';
+				if( v != "" && !quickExists(v.path) )
+					html = '<span class="error">' + html + '</span>';
+				if( v != "" )
+					html += ' <i class="fa fa-external-link openfile" aria-hidden="true" onclick="_.openFile(\'${v.path}\')"></i>';
+				html;
+			case TTilePos:
+				return tileHtml(v);
+			case TTileLayer:
+				var v : cdb.Types.TileLayer = v;
+				var path = getAbsPath(v.file);
+				if( !quickExists(path) )
+					'<span class="error">' + v.file + '</span>';
+				else
+					'#DATA';
+			case TDynamic:
+				var str = Std.string(v).split("\n").join(" ").split("\t").join("");
+				if( str.length > 50 ) str = str.substr(0, 47) + "...";
+				str;
 		}
 	}
 
@@ -1030,14 +1024,7 @@ class Main extends Model {
 
 		IpcRenderer.removeAllListeners("sheet-export-json");
 		IpcRenderer.on("sheet-export-json", function() {
-			var i = J("<input>").attr("type", "file").attr("nwsaveas",'${s.name}.json').css("display","none").change(function(e) {
-				var j = JTHIS;
-				this.exportSheetJSON(s, j.val());
-				initContent();
-				j.remove();
-			});
-			i.appendTo(J("body"));
-			i.click();
+			this.exportSheetJSON(s);
 		});
 		
 		IpcRenderer.removeAllListeners("sheet-level");
@@ -2586,10 +2573,10 @@ function initMenu() {
 						h : size.height,
 						max : false,
 					};
+					savePrefs();
+					window.close();
 				}));
 			}
-			savePrefs();
-			window.close();
 		});
 
 		IpcRenderer.on('maximize', function() {

@@ -52,6 +52,22 @@ class Model {
 		loadPrefs();
 	}
 
+	function quickExists(path) {
+		trace(path);
+		var c = existsCache.get(path);
+		if( c == null ) {
+			c = { t : -1e9, r : false };
+			existsCache.set(path, c);
+		}
+		var t = haxe.Timer.stamp();
+		if( c.t < t - 10 ) { // cache result for 10s
+			c.r = sys.FileSystem.exists(path);
+			c.t = t;
+		}
+		trace(c.r);
+		return c.r;
+	}
+
 	public function getImageData( key : String ) : String {
 		return Reflect.field(imageBank, key);
 	}
@@ -181,7 +197,7 @@ class Model {
 	}
 
 	@:access(cdb.Sheet)
-	function exportSheetJSON(_s:cdb.Sheet, _filePath:String) {
+	function exportSheetJSON(_s:cdb.Sheet) {
 
 		// export the main sheet and potential subsheets...
 		var name = _s.name;
@@ -190,7 +206,7 @@ class Model {
 			if (s.name.startsWith('${_s.name}@')) // gather all subsheets
 				toExport.push(s.sheet);
 
-		sys.io.File.saveContent(_filePath, haxe.Json.stringify(toExport, null, "    "));
+		IpcRenderer.invoke("saveFile", '${_s.name}.json', haxe.Json.stringify(toExport, null, "    "));
 	}
 
 	@:access(cdb.Sheet)
