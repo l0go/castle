@@ -1416,9 +1416,9 @@ class Main extends Model {
 	}
 
 	public function chooseFile( callb : {path: String, bytes: Bytes} -> Void, ?images: Bool = false) {
-		IpcRenderer.invoke("chooseFileBytes", "fileChosen", images);
-		IpcRenderer.on("fileChosen", (event, path, bytes) -> {
-			callb(cast {path: path, bytes: bytes});
+		IpcRenderer.invoke("chooseFileBytes", "fileChosen", images).then((response) -> {
+			if (response != null)
+				callb({path: untyped response.path, bytes: untyped response.bytes});
 		});
 	}
 
@@ -2488,14 +2488,10 @@ function initMenu() {
 		});
 
 		IpcRenderer.on('click-open', function() {
-			var i = J("<input>").attr("type", "file").css("display","none").change(function(e) {
-				var j = JTHIS;
-				prefs.curFile = j.val();
+			chooseFile((f) -> {
+				prefs.curFile = f.path;
 				load();
-				j.remove();
 			});
-			i.appendTo(J("body"));
-			i.click();
 		});
 
 		IpcRenderer.on('click-save', function() {
@@ -2531,14 +2527,7 @@ function initMenu() {
 		IpcRenderer.on('click-export', function() {
 			var lang = new cdb.Lang(@:privateAccess base.data);
 			var xml = lang.buildXML();
-			var i = J("<input>").attr("type", "file").attr("nwsaveas","export.xml").css("display","none").change(function(e) {
-				var j = JTHIS;
-				var file = j.val();
-				sys.io.File.saveContent(file, String.fromCharCode(0xFEFF)+xml); // prefix with BOM
-				j.remove();
-			});
-			i.appendTo(J("body"));
-			i.click();
+			IpcRenderer.invoke("saveFile", 'export.xml', String.fromCharCode(0xFEFF)+xml);
 		});
 
 		IpcRenderer.on('click-compression', function(event, checked) {

@@ -1,10 +1,9 @@
 package;
 
 import sys.io.File;
-import cdb.Data.ColumnType;
 
-import electron.main.Dialog;
 import electron.main.App;
+import electron.main.Dialog;
 import electron.main.BrowserWindow;
 import electron.main.IpcMain;
 
@@ -13,7 +12,7 @@ import electron.main.MenuItem;
 
 class Main {
 	static function main() {
-		electron.main.App.whenReady().then(_ -> {
+		App.whenReady().then(_ -> {
 			final win = new BrowserWindow({
 				webPreferences: {
 					nodeIntegration: true,
@@ -77,8 +76,12 @@ class Main {
 					}
 				}).then((response) -> {
 					if (untyped response.filePaths[0] != null) {
-						win.webContents.send(channel, untyped response.filePaths[0], sys.io.File.getBytes(untyped response.filePaths[0]));
+						return {
+							path: untyped response.filePaths[0],
+							bytes: sys.io.File.getBytes(untyped response.filePaths[0]),
+						};
 					}
+					return null;
 				});
 			});
 
@@ -96,7 +99,7 @@ class Main {
 
 			initMenu(win);
 
-			win.loadFile("index.html");
+			win.loadFile(App.getAppPath() + "/index.html");
 		});
 	}
 
@@ -109,9 +112,9 @@ class Main {
 
 		var mrecents = new Menu();
 		IpcMain.removeHandler("add-recents-file");
-		IpcMain.handle("add-recents-file", function(event, file) {
+		IpcMain.handle("add-recents-file", (event, file) -> {
 			var m = new MenuItem( { label : file } );
-			m.click = function() {
+			m.click = () -> {
 				window.webContents.send("open-recent", file);
 			};
 			mrecents.append(m);
@@ -157,17 +160,13 @@ class Main {
 		});
 
 		var mabout = new MenuItem( { label : "About" } );
-		mabout.click = function() {
-			window.webContents.send("click-about");
-		};
+		mabout.click = () -> window.webContents.send("click-about");
 
 		var mexit = new MenuItem( { label : "Exit", accelerator : '$modifier+Q' } );
-		mexit.click = function() electron.main.App.quit();
+		mexit.click = electron.main.App.quit;
 
 		var mdebug = new MenuItem( { label : "Dev" } );
-		mdebug.click = function(event) {
-			window.webContents.openDevTools(); 
-		}
+		mdebug.click = window.webContents.openDevTools; 
 
 		for( m in [mnew, mopen, mrecent, msave, mclean, mcompress, mexport, mabout, mexit] )
 			mfiles.append(m);
@@ -181,42 +180,23 @@ class Main {
 		var medit = new MenuItem({ label : "Database", submenu : medits });
 		
 		var mnewsheet = new MenuItem( { label : "New Sheet", accelerator : '$modifier+N' } );
-		mnewsheet.click = () -> {
-			window.webContents.send("click-new-sheet");
-		};
+		mnewsheet.click = () -> window.webContents.send("click-new-sheet");
 
 		var mnewcolumn = new MenuItem( { label : "Add Column", accelerator : '$modifier+C' } );
-		mnewcolumn.click = () -> {
-			window.webContents.send("click-add-column");
-		};
+		mnewcolumn.click = () -> window.webContents.send("click-add-column");
 
 		var mnewline = new MenuItem( { label : "Add Line", accelerator : '$modifier+L' } );
-		mnewline.click = () -> {
-			window.webContents.send("click-add-line");
-		};
+		mnewline.click = () -> window.webContents.send("click-add-line");
 
 		var medittypes = new MenuItem( { label : "Edit Types", accelerator : '$modifier+E' } );
-		medittypes.click = () -> {
-			window.webContents.send("click-edit-types");
-		};
+		medittypes.click = () -> window.webContents.send("click-edit-types");
 
 		for(m in [mnewsheet, mnewcolumn, mnewline, medittypes])
 			medits.append(m);
 
-		// TODO: Don't let logo remove this without figuring out what it does
-		//if(Sys.systemName().indexOf("Mac") != -1) {
-		//	menu.removeAt(0); // remove default menu
-		//	macEditMenu = menu.items[0]; // save default edit menu
-		//	menu.removeAt(0); // remove default edit menu
-		//	menu.insert(mfile, 0); // put it before the default Edit menu
-		//	mfiles.insert(mdebug, 7); // needs to go under File or it won't show
-		//	mfiles.insert(medit, 7); // needs to go under File or it won't show
-		//}
-		//else {
 		menu.append(mfile);
 		menu.append(medit);
 		menu.append(mdebug);
-		//}
 
 		Menu.setApplicationMenu(menu);
 	}
@@ -241,9 +221,7 @@ class Main {
 		var nsep = new MenuItem( { label : "Separator", role: "checkbox" } );
 		nsep.enabled = enableSeparator;
 		nsep.checked = checkSeparator;
-		nsep.click = () -> {
-			window.webContents.send("line-separator");
-		};
+		nsep.click = () -> window.webContents.send("line-separator");
 		n.append(nsep);
 
 		return n;
@@ -259,24 +237,18 @@ class Main {
 			"Delete" => "column-delete",
 		]) {
 			var item = new MenuItem({ label : label });
-			item.click = () -> {
-				window.webContents.send(channel);
-			};
+			item.click = () -> window.webContents.send(channel);
 			n.append(item);
 		}
 
 		var ndisp = new MenuItem( { label : "Display Column", role : "checkbox" } );
-		ndisp.click = () -> {
-			window.webContents.send("column-display");
-		}
+		ndisp.click = () -> window.webContents.send("column-display");
 		ndisp.checked = checked;
 		ndisp.enabled = ndispEnabled;
 		n.append(ndisp);
 
 		var nicon = new MenuItem( { label : "Display Icon", role : "checkbox" } );
-		nicon.click = () -> {
-			window.webContents.send("column-display-icon");
-		}
+		nicon.click = () -> window.webContents.send("column-display-icon");
 		nicon.checked = checked;
 		nicon.enabled = niconEnabled;
 		n.append(nicon);
@@ -287,9 +259,7 @@ class Main {
 				var conv = new MenuItem( { label : "Convert", submenu: cm } );
 				for( k in ["lowercase", "UPPERCASE", "UpperIdent","lowerIdent"] ) {
 					var m = new MenuItem( { label : k } );
-					m.click = () -> {
-						window.webContents.send("column-convert-casing", k);
-					}
+					m.click = () -> window.webContents.send("column-convert-casing", k);
 					cm.append(m);
 				}
 				n.append(conv);
@@ -298,9 +268,7 @@ class Main {
 				var conv = new MenuItem( { label : "Convert", submenu: cm} );
 				for (k in ["* 10", "/ 10", "+ 1", "-1"]) {
 					var m = new MenuItem( { label : k } );
-					m.click = () -> {
-						window.webContents.send("column-convert-number", k);
-					}
+					m.click = () -> window.webContents.send("column-convert-number", k);
 					cm.append(m);
 				}
 				n.append(conv);
@@ -320,22 +288,16 @@ class Main {
 			"Delete" => "sheet-delete",
 		]) {
 			var item = new MenuItem({ label : label });
-			item.click = () -> {
-				window.webContents.send(channel);
-			};
+			item.click = () -> window.webContents.send(channel);
 			n.append(item);
 		}
 
 		var nindex = new MenuItem( { label : "Add Index", role : "checkbox" } );
-		nindex.click = () -> {
-			window.webContents.send("sheet-add-index");
-		};
+		nindex.click = () -> window.webContents.send("sheet-add-index");
 		nindex.checked = nindexChecked;
 
 		var ngroup = new MenuItem( { label : "Add Group", role : "checkbox" } );
-		ngroup.click = () -> {
-			window.webContents.send("sheet-add-group");
-		};
+		ngroup.click = () -> window.webContents.send("sheet-add-group");
 		IpcMain.removeHandler("set-ngroup");
 		ngroup.checked = nindexChecked;
 
@@ -353,9 +315,7 @@ class Main {
 		};
 
 		var exportSheetCSV = new MenuItem( { label : "Export Sheet Data...", role : "checkbox" } );
-		exportSheetCSV.click = () -> {
-			window.webContents.send("sheet-export-csv");
-		};
+		exportSheetCSV.click = () -> window.webContents.send("sheet-export-csv");
 
 		csv.append(importSheetCSV);
 		csv.append(exportSheetCSV);
@@ -374,9 +334,7 @@ class Main {
 		};
 
 		var exportSheetJSON = new MenuItem( { label : "Export Sheet Data...", role : "checkbox" } );
-		exportSheetJSON.click = () -> {
-			window.webContents.send("sheet-export-json");
-		};
+		exportSheetJSON.click = () -> window.webContents.send("sheet-export-json");
 
 		json.append(importSheetJSON);
 		json.append(exportSheetJSON);
