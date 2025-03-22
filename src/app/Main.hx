@@ -270,8 +270,6 @@ class Main extends Model {
 			refresh();
 			save();
 		case K.UP:
-			trace(e.shiftKey);
-			trace(ctrlDown);
 			moveCursor(0, -1, e.shiftKey, ctrlDown);
 			e.preventDefault();
 		case K.DOWN:
@@ -1430,7 +1428,6 @@ class Main extends Model {
 		var available = [];
 		var index = 0;
 		for( c in sheet.columns ) {
-			trace(c);
 			if( c.opt && !Reflect.hasField(props,c.name) ) {
 				available.push(c);
 				continue;
@@ -1965,7 +1962,6 @@ class Main extends Model {
 	}
 
 	function openFile( file : String ) {
-		trace(file);
 		electron.Shell.openPath(file);
 	}
 
@@ -2495,14 +2491,10 @@ function initMenu() {
 		});
 
 		IpcRenderer.on('click-save', function() {
-			var i = J("<input>").attr("type", "file").attr("nwsaveas","new.cdb").css("display","none").change(function(e) {
-				var j = JTHIS;
-				prefs.curFile = j.val();
+			IpcRenderer.invoke("saveFile", "new.cdb", null).then((path) -> {
+				prefs.curFile = path;
 				save();
-				j.remove();
 			});
-			i.appendTo(J("body"));
-			i.click();
 		});
 
 		IpcRenderer.on('click-clean', function() {

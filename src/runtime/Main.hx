@@ -90,7 +90,12 @@ class Main {
 					defaultPath: saveAs,
 					properties: ['createDirectory', 'showOverwriteConfirmation'],
 				});
-				File.saveContent(path, text);
+				if (text != null) {
+					File.saveContent(path, text);
+				} else {
+					return path;
+				}
+				return null;
 			});
 
 			IpcMain.handle("exists", (event, path) -> {

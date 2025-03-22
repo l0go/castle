@@ -3,6 +3,7 @@
 --debug
 -dce std
 -w -WDeprecated
+-cp src/
 
 --each
 
