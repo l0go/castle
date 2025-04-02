@@ -11,6 +11,27 @@ Since it's a hidden gem and still super useful I decided to fork it here & updat
 ![image](https://github.com/dazKind/castle/assets/5015415/fb52ec84-f020-4a64-bd00-5d6e78d5ecfb)
 
 
+## Compile from sources:
+
+### 1. Install Prerequisites
+- Install [Haxe](https://haxe.org) using approriate installer from https://haxe.org/download/
+- Install [NodeJS](https://nodejs.org) and [pnpm](https://pnpm.io/). Normal npm should work too, but is untested.
+
+### 2. Build castle.js
+- Clone this repository and enter it with your terminal
+- Install haxelibs using the command `haxelib install build.hxml`
+- Install js libraries using the command `pnpm install`
+- At the root of the repository folder run
+```
+haxe build.hxml
+```
+This will create `castle.js` and `index.js` files in the `bin` folder
+
+#### 3. Package or Run
+The Electron app itself lives in the `bin` folder. We can run it with this command:
+```
+npx electron bin
+```
 
 ---
 
