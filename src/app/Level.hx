@@ -656,7 +656,7 @@ class Level {
 
 	public function onResize() {
 		IpcRenderer.invoke('getWindowGeometry').then(cast((size : {width : Int, height : Int, x : Int, y : Int}) -> {
-			content.find(".scroll").css("height", (height - 240) + "px");
+			content.find(".scroll").css("height", (size.height - 240) + "px");
 		}));
 	}
 

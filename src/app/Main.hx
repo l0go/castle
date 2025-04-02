@@ -551,10 +551,18 @@ class Main extends Model {
 		var max = width > height ? width : height;
 		var zoom = max <= 32 ? 2 : 64 / max;
 		var inl = isInline ? 'display:inline-block;' : '';
-		var url = "file://" + path;
-		var html = '<div class="tile" id="_c${id}" style="width : ${Std.int(width * zoom)}px; height : ${Std.int(height * zoom)}px; background : url(\'$url\') -${Std.int(v.size*v.x*zoom)}px -${Std.int(v.size*v.y*zoom)}px; opacity:0; $inl"></div>';
-		html += '<img src="$url" style="display:none" onload="$(\'#_c$id\').css({opacity:1, backgroundSize : ((this.width*$zoom)|0)+\'px \' + ((this.height*$zoom)|0)+\'px\' '+(zoom > 1 ? ", imageRenderin
-			g : 'pixelated'" : "") +'}); if( this.parentNode != null ) this.parentNode.removeChild(this)"/>';
+		var ext = path.split(".").pop().toLowerCase();
+		var data = "data:image/" + ext + ";base64," + new haxe.crypto.BaseCode(haxe.io.Bytes.ofString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")).encodeBytes(sys.io.File.getBytes(getAbsPath(path))).toString();
+		var html = '<div class="tile" id="_c${id}" style="width : ${Std.int(width * zoom)}px; height : ${Std.int(height * zoom)}px; background : url(\'$data\') -${Std.int(v.size*v.x*zoom)}px -${Std.int(v.size*v.y*zoom)}px; opacity:0; $inl"></div>';
+		var img = new js.html.Image();
+		img.src = data;
+		img.onload = () -> {
+			J('#_c$id').css(untyped {
+				opacity: 1,
+				backgroundSize: ((img.width*zoom)|0) + 'px ' + ((img.height*zoom)|0) +'px',
+				imageRendering: zoom > 1 ? "pixelated" : "default",
+			});
+		};
 		return html;
 	}
 
@@ -1880,8 +1888,8 @@ class Main extends Model {
 							dialog.find(".tileView").height(i.height).width(i.width);
 							dialog.find(".tilePath").text(file+" (" + i.width + "x" + i.height + ")");
 						};
-						i.src = "file://" + getAbsPath(file);
-
+						var ext = file.split(".").pop().toLowerCase();
+						i.src = "data:image/" + ext + ";base64," + new haxe.crypto.BaseCode(haxe.io.Bytes.ofString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")).encodeBytes(sys.io.File.getBytes(getAbsPath(file))).toString();
 					});
 
 
