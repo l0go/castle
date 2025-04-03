@@ -2599,7 +2599,12 @@ function initMenu() {
 		lastSave = getFileTime();
 		super.load(noError);
 
-		js.Browser.document.title = "CastleDB Editor v1.6.2 - " + prefs.curFile;
+		trace(prefs.curFile);
+		js.Browser.document.title = if (prefs.curFile != null) {
+			"CastleDB Editor v1.6.2 - " + prefs.curFile;
+		} else {
+			"CastleDB Editor v1.6.2";
+		}
 		J('.imagePreview').hide();
 
 		initContent();
