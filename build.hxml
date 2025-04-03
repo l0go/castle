@@ -8,11 +8,11 @@
 --each
 
 -js bin/index.js
--cp src/runtime/
+-cp src/main/
 
 --next
 
--cp src/app/
+-cp src/renderer/
 -js bin/castle.js
 -lib hxnodejs:git:https://github.com/HaxeFoundation/hxnodejs
 -lib hx3compat:git:https://github.com/HaxeFoundation/hx3compat
